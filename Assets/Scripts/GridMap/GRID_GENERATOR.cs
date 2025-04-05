@@ -22,6 +22,10 @@ public class GRID_GENERATOR : MonoBehaviour
 
     public GameObject[] enemyPrefabs;
     public float enemySpawnChance = 0.2f;
+    public int enemySpawnStartRow = 5;  // Los enemigos comienzan a aparecer después de esta fila
+
+    public GameObject initialBuildingPrefab;  // Edificio que se usará en las primeras filas
+    public int buildingControlRows = 5;       // Número de filas con edificio controlado
 
     void Start()
     {
@@ -89,7 +93,7 @@ public class GRID_GENERATOR : MonoBehaviour
                 yPosition = 0f;
 
                 // Generar enemigos con probabilidad
-                if (Random.value < enemySpawnChance && enemyPrefabs.Length > 0 && !activeEnemies.ContainsKey(key))
+                if (spawnZ >= enemySpawnStartRow * cellSize && Random.value < enemySpawnChance && enemyPrefabs.Length > 0 && !activeEnemies.ContainsKey(key))
                 {
                     bool canPlaceEnemy = true;
 
@@ -109,7 +113,9 @@ public class GRID_GENERATOR : MonoBehaviour
                     {
                         Vector3 enemyPosition = new Vector3(spawnX, 0.5f, spawnZ);
                         int index = Random.Range(0, enemyPrefabs.Length);
-                        GameObject newEnemy = Instantiate(enemyPrefabs[index], enemyPosition, Quaternion.identity);
+                        Vector3 directionToPlayer = (player.position - enemyPosition).normalized;
+                        Quaternion lookRotation = Quaternion.LookRotation(new Vector3(directionToPlayer.x, 0, directionToPlayer.z));
+                        GameObject newEnemy = Instantiate(enemyPrefabs[index], enemyPosition, lookRotation);
                         activeEnemies.Add(key, newEnemy);
                     }
                 }
@@ -119,7 +125,14 @@ public class GRID_GENERATOR : MonoBehaviour
                 // Alternar entre colocar edificios y árboles
                 if (placeBuildingNext && !activeBuildings.ContainsKey(key))  // Verificamos si la celda no tiene edificio
                 {
-                    prefab = buildingPrefabs[Random.Range(0, buildingPrefabs.Length)];
+                    if (spawnZ < buildingControlRows * cellSize)
+                    {
+                        prefab = initialBuildingPrefab; // Usamos el edificio definido para las primeras filas
+                    }
+                    else
+                    {
+                        prefab = buildingPrefabs[Random.Range(0, buildingPrefabs.Length)];
+                    }
 
                     // Verificar que las celdas necesarias para el edificio estén libres (3x2)
                     bool canPlaceBuilding = true;

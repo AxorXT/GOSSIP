@@ -1,8 +1,8 @@
 using UnityEngine;
 
-public class Lose : MonoBehaviour
+public class LoseBuilds : MonoBehaviour
 {
-    public GameObject ScreenLose;
+    public GameObject ScreenLose; 
     public GameObject Player;
 
     public void OnTriggerEnter(Collider other)
@@ -11,7 +11,7 @@ public class Lose : MonoBehaviour
 
         if (other.CompareTag("Player"))
         {
-            Debug.Log("Jugador detectado, desactivando...");
+            Debug.Log("Colisión con edificio, mostrando pantalla de muerte...");
             Player.SetActive(false);
             ScreenLose.SetActive(true);
         }
