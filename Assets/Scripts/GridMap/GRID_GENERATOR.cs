@@ -1,5 +1,7 @@
 ﻿using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.SceneManagement;
+
 
 public class GRID_GENERATOR : MonoBehaviour
 {
@@ -242,4 +244,12 @@ public class GRID_GENERATOR : MonoBehaviour
             activeEnemies.Remove(key);  // Eliminar la referencia del diccionario
         }
     }
+
+    public void Retry()
+    {
+
+        SceneManager.LoadScene("GOSSIP_LEVEL");
+    }
+
+
 }

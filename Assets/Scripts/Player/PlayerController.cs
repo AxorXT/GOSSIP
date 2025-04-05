@@ -1,4 +1,5 @@
 using UnityEngine;
+using UnityEngine.SceneManagement;
 
 public class PlayerController : MonoBehaviour
 {
@@ -54,5 +55,7 @@ public class PlayerController : MonoBehaviour
         Vector3 targetPosition = new Vector3(targetX, transform.position.y, transform.position.z);
         transform.position = Vector3.Lerp(transform.position, targetPosition, Time.deltaTime * 10);
     }
+
+ 
 }
 
