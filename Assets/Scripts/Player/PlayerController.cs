@@ -3,99 +3,135 @@ using UnityEngine.SceneManagement;
 
 public class PlayerController : MonoBehaviour
 {
-    public Animator playerAnimator; // El Animator del jugador
     public GameObject ScoreScren;
     public GameObject PantallaInicial;
     public GameObject PantallaOpciones;
     public GameObject CREDITS;
     public GameObject GameName;
-    
 
     [Header("Velocidad")]
-    public float startSpeed = 10f; // Velocidad inicial
-    public float maxSpeed = 25f;   // Velocidad máxima
-    public float speedIncreaseRate = 0.5f; // Cuánto sube por segundo
-    private float forwardSpeed;    // Velocidad actual
+    public float startSpeed = 10f;
+    public float maxSpeed = 25f;
+    public float speedIncreaseRate = 0.5f;
+    private float forwardSpeed;
 
-    private bool gameStarted = false; // Estado del juego
-    private float targetX; // Posición objetivo en X
-
+    private bool gameStarted = false;
+    private float targetX;
 
     [Header("Carriles")]
-    public float blockSize = 5f; // Tamaño del bloque
-    public int maxLanes = 3; // Número de carriles
+    public float blockSize = 5f;
+    public int maxLanes = 3;
     private float minX, maxX;
+
+    public static bool GameStartedGlobally = false;
+
+    private Vector2 startTouchPos;
+    private Vector2 endTouchPos;
+    private bool swipeDetected = false;
 
     void Start()
     {
         PantallaOpciones.SetActive(false);
         PantallaInicial.SetActive(true);
         ScoreScren.SetActive(false);
-        // Velocidad inicial
+
         forwardSpeed = startSpeed;
-
-        // Configuración de animaciones
-        playerAnimator.SetBool("IsIdle", true);
-        playerAnimator.SetBool("IsWalking", false);
-
-        // Posición inicial
         targetX = 0;
         transform.position = new Vector3(targetX, transform.position.y, transform.position.z);
 
         minX = -((maxLanes - 1) / 2f) * blockSize;
         maxX = ((maxLanes - 1) / 2f) * blockSize;
-    }
 
-    public void StartGame()
-    {
-    
-            gameStarted = true;
-            playerAnimator.SetBool("IsIdle", false);
-            playerAnimator.SetBool("IsWalking", true);
-            PantallaInicial.SetActive(false);
-            ScoreScren.SetActive(true);
-
-        
+        GameStartedGlobally = false;
     }
 
     void Update()
     {
-        // Esperar clic para comenzar
-        /*if (!gameStarted && Input.GetMouseButtonDown(0))
+        // Tocar o dar clic para iniciar el juego
+        if (!gameStarted && (
+            (Application.isMobilePlatform && Input.touchCount > 0 && Input.GetTouch(0).phase == TouchPhase.Began) ||
+            (!Application.isMobilePlatform && Input.GetMouseButtonDown(0))
+        ))
         {
-            gameStarted = true;
-            playerAnimator.SetBool("IsIdle", false);
-            playerAnimator.SetBool("IsWalking", true);
-            PantallaInicial.SetActive(false);
-            ScoreScren.SetActive(true);
-
-        }*/
+            StartGame();
+        }
 
         if (gameStarted)
         {
-            // Aumentar velocidad progresivamente (hasta el máximo)
+            // Detectar swipe en móvil
+            if (Application.isMobilePlatform && Input.touchCount > 0)
+            {
+                Touch touch = Input.GetTouch(0);
+
+                if (touch.phase == TouchPhase.Began)
+                {
+                    startTouchPos = touch.position;
+                    swipeDetected = false;
+                }
+                else if (touch.phase == TouchPhase.Moved && !swipeDetected)
+                {
+                    endTouchPos = touch.position;
+                    DetectSwipe();
+                }
+            }
+
+            // Simular swipe con mouse en el editor
+            if (!Application.isMobilePlatform)
+            {
+                if (Input.GetMouseButtonDown(0))
+                {
+                    startTouchPos = Input.mousePosition;
+                    swipeDetected = false;
+                }
+                else if (Input.GetMouseButton(0) && !swipeDetected)
+                {
+                    endTouchPos = Input.mousePosition;
+                    DetectSwipe();
+                }
+            }
+
+            // Aumentar velocidad progresiva
             if (forwardSpeed < maxSpeed)
             {
                 forwardSpeed += speedIncreaseRate * Time.deltaTime;
             }
 
-            // Avance
+            // Movimiento hacia adelante
             transform.Translate(Vector3.forward * forwardSpeed * Time.deltaTime);
 
-            // Movimiento lateral
-            if (Input.GetKeyDown(KeyCode.W) && targetX - blockSize >= minX)
-            {
-                targetX -= blockSize;
-            }
-            else if (Input.GetKeyDown(KeyCode.S) && targetX + blockSize <= maxX)
-            {
-                targetX += blockSize;
-            }
-
-            // Suavizar movimiento lateral
+            // Movimiento lateral suavizado
             Vector3 targetPosition = new Vector3(targetX, transform.position.y, transform.position.z);
             transform.position = Vector3.Lerp(transform.position, targetPosition, Time.deltaTime * 10);
         }
+    }
+
+    void DetectSwipe()
+    {
+        float deltaX = endTouchPos.x - startTouchPos.x;
+        float deltaY = Mathf.Abs(endTouchPos.y - startTouchPos.y); // evitar diagonales
+
+        if (Mathf.Abs(deltaX) > 100f && deltaY < 100f) // swipe horizontal claro
+        {
+            if (deltaX > 0 && targetX + blockSize <= maxX)
+            {
+                targetX += blockSize;
+            }
+            else if (deltaX < 0 && targetX - blockSize >= minX)
+            {
+                targetX -= blockSize;
+            }
+
+            swipeDetected = true;
+        }
+    }
+
+    void StartGame()
+    {
+        gameStarted = true;
+        GameStartedGlobally = true;
+
+        PantallaInicial.SetActive(false);
+        ScoreScren.SetActive(true);
     }
 
     public void Opciones()
@@ -106,11 +142,7 @@ public class PlayerController : MonoBehaviour
         CREDITS.SetActive(false);
 
         RectTransform rt = GameName.GetComponent<RectTransform>();
-
-        // Primero posicionarlo fuera de la pantalla (izquierda)
         rt.anchoredPosition = new Vector2(-1000f, rt.anchoredPosition.y);
-
-        // Animarlo hacia el centro (x = 0)
         LeanTween.move(rt, new Vector2(-5f, rt.anchoredPosition.y), 1.5f).setEaseOutExpo();
     }
 
