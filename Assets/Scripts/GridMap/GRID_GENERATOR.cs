@@ -5,38 +5,57 @@ using UnityEngine.SceneManagement;
 
 public class GRID_GENERATOR : MonoBehaviour
 {
+    public GameObject[] floorPrefabs;
     public GameObject[] roadPrefabs;
     public GameObject[] buildingPrefabs;
+    public ObjectPool[] buildingPools;
+    public ObjectPool[] floorPools;  // Cambié a un array de ObjectPool
+    public ObjectPool[] roadPools;  // Cambié a un array de ObjectPool
+    public ObjectPool[] enemyPools;
     public int gridWidth = 7;
     public int gridHeight = 5;
     public float cellSize = 5f;
     public Transform player;
 
-    private Dictionary<Vector2, GameObject> activeTiles = new Dictionary<Vector2, GameObject>(); // Para suelos
-    private Dictionary<Vector2, GameObject> activeBuildings = new Dictionary<Vector2, GameObject>(); // Para edificios
-    private Dictionary<Vector2, GameObject> activeEnemies = new Dictionary<Vector2, GameObject>(); // Para enemigos
+    private Dictionary<Vector2, GameObject> activeTiles = new Dictionary<Vector2, GameObject>();
+    private Dictionary<Vector2, GameObject> activeBuildings = new Dictionary<Vector2, GameObject>();
+    private Dictionary<Vector2, GameObject> activeEnemies = new Dictionary<Vector2, GameObject>();
+    private Dictionary<Vector2, GameObject> activeRoads = new Dictionary<Vector2, GameObject>(); // Diccionario para los caminos
 
     private float spawnZ = 0f;
-    private float safeZone = 5f;  // Distancia adicional para eliminar objetos
+    private float safeZone = 5f;
+    private int currentRow = 0;
 
     private int roadWidth;
     private int roadStartX;
 
-    public GameObject[] enemyPrefabs;
     public float enemySpawnChance = 0.2f;
-    public int enemySpawnStartRow = 5;  // Los enemigos comienzan a aparecer después de esta fila
+    public int enemySpawnStartRow = 5;
 
-    public GameObject initialBuildingPrefab;  // Edificio que se usará en las primeras filas
-    public int buildingControlRows = 5;       // Número de filas con edificio controlado
+    public GameObject initialBuildingPrefab;
+    public ObjectPool initialBuildingPool;
+    public int buildingControlRows = 5;
+
+    private GameObject[] floorColumnPrefabs;
+
+    public SkyboxManager skyboxManager;
 
     void Start()
     {
+        skyboxManager.StartDayNightCycle();
+
         roadWidth = Mathf.Max(3, gridWidth * 70 / 100);
         if (roadWidth % 2 == 0) roadWidth--;
 
         roadStartX = (gridWidth - roadWidth) / 2;
         float playerStartX = (gridWidth / 2) * cellSize;
         player.position = new Vector3(playerStartX, player.position.y, 0);
+
+        floorColumnPrefabs = new GameObject[gridWidth];
+        for (int x = 0; x < gridWidth; x++)
+        {
+            floorColumnPrefabs[x] = floorPrefabs[x % floorPrefabs.Length];
+        }
 
         for (int z = 0; z < gridHeight; z++)
         {
@@ -46,61 +65,57 @@ public class GRID_GENERATOR : MonoBehaviour
 
     void Update()
     {
-        // Verifica si el jugador ha avanzado lo suficiente como para generar una nueva fila
         if (player.position.z - safeZone > (spawnZ - gridHeight * cellSize))
         {
             SpawnRow();
-            DeleteOldRow();  // Elimina las filas antiguas de objetos
+            DeleteOldRow();
         }
 
-        // Elimina los enemigos que ya han quedado atrás
         DeleteOldEnemies();
     }
 
     void SpawnRow()
     {
-        int direction = Random.Range(0, 3);
-        if (direction == 0 && roadStartX > 1) roadStartX--;
-        else if (direction == 2 && roadStartX + roadWidth < gridWidth - 1) roadStartX++;
+        // Si aún no han pasado las primeras 15 filas, mantenemos el camino recto
+        if (currentRow >= 15)
+        {
+            int direction = Random.Range(0, 3);
+            if (direction == 0 && roadStartX > 1) roadStartX--;
+            else if (direction == 2 && roadStartX + roadWidth < gridWidth - 1) roadStartX++;
+        }
 
-        bool placeBuildingNext = true; // Comenzamos con la colocación de un edificio
+        bool placeBuildingNext = true;
 
         for (int x = 0; x < gridWidth; x++)
         {
             float spawnX = (x - (gridWidth / 2)) * cellSize;
             Vector2 key = new Vector2(spawnX, spawnZ);
 
-            // Asegurarse de que no haya objetos duplicados en la misma celda para el suelo
-            if (!activeTiles.ContainsKey(key)) // Si la celda no tiene objeto, colocar un piso
+            if (!activeTiles.ContainsKey(key))
             {
-                GameObject floorPrefab = roadPrefabs[Random.Range(0, roadPrefabs.Length)];
-                if (floorPrefab != null)
-                {
-                    GameObject newFloor = Instantiate(floorPrefab, new Vector3(spawnX, 0f, spawnZ), Quaternion.identity);
-                    activeTiles.Add(key, newFloor);  // Añadimos el piso a las tiles activas
-                }
-                else
-                {
-                    Debug.LogError("Floor prefab is missing.");
-                }
+                // Seleccionamos el pool adecuado para el piso
+                int floorIndex = x % floorPools.Length; // O puedes usar Random.Range(0, floorPools.Length) si prefieres aleatorio
+                GameObject newFloor = floorPools[floorIndex].Get(new Vector3(spawnX, 0f, spawnZ), Quaternion.identity);
+                StartCoroutine(Utils.AnimateScaleIn(newFloor));
+                activeTiles.Add(key, newFloor);
             }
 
-            // Instanciar edificios o carreteras encima del piso
             GameObject prefab = null;
             float yPosition = 0.5f;
 
             if (x >= roadStartX && x < roadStartX + roadWidth)
             {
-                prefab = roadPrefabs[Random.Range(0, roadPrefabs.Length)];
-                yPosition = 0f;
+                // Usar un índice aleatorio para seleccionar el pool de road
+                int roadIndex = Random.Range(0, roadPools.Length);
+                GameObject road = roadPools[roadIndex].Get(new Vector3(spawnX, 0f, spawnZ), Quaternion.identity);
+                StartCoroutine(Utils.AnimateScaleIn(road));
+                activeRoads[key] = road; // Añadimos al diccionario de caminos
 
-                // Generar enemigos con probabilidad
-                if (spawnZ >= enemySpawnStartRow * cellSize && Random.value < enemySpawnChance && enemyPrefabs.Length > 0 && !activeEnemies.ContainsKey(key))
+                if (spawnZ >= enemySpawnStartRow * cellSize && Random.value < enemySpawnChance && enemyPools.Length > 0 && !activeEnemies.ContainsKey(key))
                 {
                     bool canPlaceEnemy = true;
 
-                    // Verificar que las celdas adyacentes al edificio están vacías
-                    for (int offsetX = -1; offsetX <= 1; offsetX++)  // Comprobamos una celda antes y después del edificio
+                    for (int offsetX = -1; offsetX <= 1; offsetX++)
                     {
                         Vector2 checkKey = new Vector2(spawnX + offsetX * cellSize, spawnZ);
                         if (activeBuildings.ContainsKey(checkKey))
@@ -110,37 +125,35 @@ public class GRID_GENERATOR : MonoBehaviour
                         }
                     }
 
-                    // Si el enemigo puede ser colocado
                     if (canPlaceEnemy)
                     {
                         Vector3 enemyPosition = new Vector3(spawnX, 0.5f, spawnZ);
-                        int index = Random.Range(0, enemyPrefabs.Length);
-                        Vector3 directionToPlayer = (player.position - enemyPosition).normalized;
-                        Quaternion lookRotation = Quaternion.LookRotation(new Vector3(directionToPlayer.x, 0, directionToPlayer.z));
-                        GameObject newEnemy = Instantiate(enemyPrefabs[index], enemyPosition, lookRotation);
+                        int index = Random.Range(0, enemyPools.Length);
+                        Quaternion lookRotation = Quaternion.LookRotation((player.position - enemyPosition).normalized);
+                        GameObject newEnemy = enemyPools[index].Get(enemyPosition, lookRotation);
+                        StartCoroutine(Utils.AnimateScaleIn(newEnemy));
                         activeEnemies.Add(key, newEnemy);
                     }
                 }
             }
             else
             {
-                // Alternar entre colocar edificios y árboles
-                if (placeBuildingNext && !activeBuildings.ContainsKey(key))  // Verificamos si la celda no tiene edificio
+                if (placeBuildingNext && !activeBuildings.ContainsKey(key))
                 {
+                    ObjectPool pool = null;
                     if (spawnZ < buildingControlRows * cellSize)
                     {
-                        prefab = initialBuildingPrefab; // Usamos el edificio definido para las primeras filas
+                        pool = initialBuildingPool;
                     }
                     else
                     {
-                        prefab = buildingPrefabs[Random.Range(0, buildingPrefabs.Length)];
+                        pool = buildingPools[Random.Range(0, buildingPools.Length)];
                     }
 
-                    // Verificar que las celdas necesarias para el edificio estén libres (3x2)
                     bool canPlaceBuilding = true;
-                    for (int offsetX = 0; offsetX < 3; offsetX++)  // Comprobamos 3 celdas en X
+                    for (int offsetX = 0; offsetX < 3; offsetX++)
                     {
-                        for (int offsetZ = 0; offsetZ < 2; offsetZ++)  // Comprobamos 2 celdas en Z
+                        for (int offsetZ = 0; offsetZ < 2; offsetZ++)
                         {
                             Vector2 checkKey = new Vector2(spawnX + offsetX * cellSize, spawnZ + offsetZ * cellSize);
                             if (activeBuildings.ContainsKey(checkKey))
@@ -152,104 +165,115 @@ public class GRID_GENERATOR : MonoBehaviour
                         if (!canPlaceBuilding) break;
                     }
 
-                    // Si se puede colocar el edificio
-                    if (canPlaceBuilding && prefab != null)
+                    if (canPlaceBuilding && pool != null)
                     {
                         Quaternion rotation = Quaternion.identity;
+                        if (spawnX < 0) rotation = Quaternion.Euler(0, 90f, 0);
+                        else if (spawnX > 0) rotation = Quaternion.Euler(0, -90f, 0);
 
-                        // Determinar la rotación según la posición
-                        if (spawnX < 0)  // Si está en el lado izquierdo
+                        for (int offsetX = 0; offsetX < 3; offsetX++)
                         {
-                            rotation = Quaternion.Euler(0, 90f, 0);  // Rotar 90 grados en Y
-                        }
-                        else if (spawnX > 0)  // Si está en el lado derecho
-                        {
-                            rotation = Quaternion.Euler(0, -90f, 0); // Rotar -90 grados en Y
-                        }
-
-                        // Instanciar el edificio en las 6 celdas ocupadas
-                        for (int offsetX = 0; offsetX < 3; offsetX++)  // Recorrer las celdas de X
-                        {
-                            for (int offsetZ = 0; offsetZ < 2; offsetZ++)  // Recorrer las celdas de Z
+                            for (int offsetZ = 0; offsetZ < 2; offsetZ++)
                             {
                                 Vector3 position = new Vector3(spawnX + offsetX * cellSize, yPosition, spawnZ + offsetZ * cellSize);
-                                Instantiate(prefab, position, rotation);
-                                activeBuildings[new Vector2(spawnX + offsetX * cellSize, spawnZ + offsetZ * cellSize)] = prefab;
+                                GameObject building = pool.Get(position, rotation);
+                                activeBuildings[new Vector2(position.x, position.z)] = building;
+                                StartCoroutine(Utils.AnimateScaleIn(building));
                             }
                         }
                     }
                 }
-                placeBuildingNext = !placeBuildingNext;  // Alternamos el valor para el siguiente objeto
+                placeBuildingNext = !placeBuildingNext;
             }
         }
 
-        spawnZ += cellSize;  // Avanzamos en la dirección Z
+        spawnZ += cellSize;
+        currentRow++;
     }
 
     void DeleteOldRow()
     {
-        // Eliminamos todas las filas de objetos que ya no son visibles
         float deleteZ = spawnZ - (gridHeight + 1) * cellSize;
         List<Vector2> toRemove = new List<Vector2>();
 
-        // Recorremos todos los objetos en activeTiles y los eliminamos si están fuera del alcance
         foreach (var tile in activeTiles)
         {
             if (tile.Key.y <= deleteZ)
             {
-                Destroy(tile.Value);  // Destruir el objeto
-                toRemove.Add(tile.Key);  // Añadir la clave para eliminarla de activeTiles
+                floorPools[0].ReturnToPool(tile.Value); // Asegúrate de devolver al pool correcto
+                toRemove.Add(tile.Key);
             }
         }
+        foreach (var key in toRemove) activeTiles.Remove(key);
 
-        // Eliminar todos los objetos de activeTiles
-        foreach (var key in toRemove)
+        toRemove.Clear();
+        foreach (var road in activeRoads)
         {
-            activeTiles.Remove(key);  // Eliminar la referencia del diccionario
+            if (road.Key.y <= deleteZ)
+            {
+                foreach (var pool in roadPools)
+                {
+                    pool.ReturnToPool(road.Value);
+                    break;
+                }
+                toRemove.Add(road.Key);
+            }
         }
+        foreach (var key in toRemove) activeRoads.Remove(key); // Eliminamos del diccionario de caminos
 
-        // Eliminar también los enemigos que han quedado atrás
-        List<Vector2> toRemoveEnemies = new List<Vector2>();
+        toRemove.Clear();
         foreach (var enemy in activeEnemies)
         {
             if (enemy.Key.y <= deleteZ)
             {
-                Destroy(enemy.Value);  // Destruir al enemigo
-                toRemoveEnemies.Add(enemy.Key);  // Añadir la clave para eliminarla de activeEnemies
+                foreach (var pool in enemyPools)
+                {
+                    pool.ReturnToPool(enemy.Value);
+                    break;
+                }
+                toRemove.Add(enemy.Key);
             }
         }
+        foreach (var key in toRemove) activeEnemies.Remove(key);
 
-        // Eliminar enemigos del diccionario
-        foreach (var key in toRemoveEnemies)
+        toRemove.Clear();
+        foreach (var building in activeBuildings)
         {
-            activeEnemies.Remove(key);  // Eliminar la referencia del diccionario de enemigos
+            if (building.Key.y <= deleteZ)
+            {
+                foreach (var pool in buildingPools)
+                {
+                    pool.ReturnToPool(building.Value);
+                    break;
+                }
+                toRemove.Add(building.Key);
+            }
         }
+        foreach (var key in toRemove) activeBuildings.Remove(key);
     }
 
     void DeleteOldEnemies()
     {
-        // Eliminamos enemigos que han quedado atrás en el camino
+        float limitZ = spawnZ - (gridHeight + 1) * cellSize;
         List<Vector2> toRemove = new List<Vector2>();
+
         foreach (var enemy in activeEnemies)
         {
-            if (enemy.Key.y <= spawnZ - (gridHeight + 1) * cellSize)
+            if (enemy.Key.y <= limitZ)
             {
-                Destroy(enemy.Value);  // Destruir al enemigo
-                toRemove.Add(enemy.Key);  // Añadir la clave para eliminarla de activeEnemies
+                foreach (var pool in enemyPools)
+                {
+                    pool.ReturnToPool(enemy.Value);
+                    break;
+                }
+                toRemove.Add(enemy.Key);
             }
         }
-
-        foreach (var key in toRemove)
-        {
-            activeEnemies.Remove(key);  // Eliminar la referencia del diccionario
-        }
+        foreach (var key in toRemove) activeEnemies.Remove(key);
     }
 
     public void Retry()
     {
-
         SceneManager.LoadScene("GOSSIP_LEVEL");
     }
-
-
 }
