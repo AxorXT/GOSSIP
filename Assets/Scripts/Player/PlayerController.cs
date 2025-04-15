@@ -1,5 +1,6 @@
 using UnityEngine;
 using UnityEngine.SceneManagement;
+using UnityEngine.EventSystems;
 
 public class PlayerController : MonoBehaviour
 {
@@ -8,6 +9,9 @@ public class PlayerController : MonoBehaviour
     public GameObject PantallaOpciones;
     public GameObject CREDITS;
     public GameObject GameName;
+
+    public GameObject invisibleButton;
+    public GameObject tapToStartButton;
 
     [Header("Velocidad")]
     public float startSpeed = 10f;
@@ -43,19 +47,12 @@ public class PlayerController : MonoBehaviour
         maxX = ((maxLanes - 1) / 2f) * blockSize;
 
         GameStartedGlobally = false;
+
+        invisibleButton.SetActive(true);
     }
 
     void Update()
     {
-        // Tocar o dar clic para iniciar el juego
-        if (!gameStarted && (
-            (Application.isMobilePlatform && Input.touchCount > 0 && Input.GetTouch(0).phase == TouchPhase.Began) ||
-            (!Application.isMobilePlatform && Input.GetMouseButtonDown(0))
-        ))
-        {
-            StartGame();
-        }
-
         if (gameStarted)
         {
             // Detectar swipe en móvil
@@ -125,13 +122,15 @@ public class PlayerController : MonoBehaviour
         }
     }
 
-    void StartGame()
+    public void StartGame()
     {
         gameStarted = true;
         GameStartedGlobally = true;
 
         PantallaInicial.SetActive(false);
         ScoreScren.SetActive(true);
+
+        invisibleButton.SetActive(false);
     }
 
     public void Opciones()
@@ -140,6 +139,7 @@ public class PlayerController : MonoBehaviour
         ScoreScren.SetActive(false);
         PantallaOpciones.SetActive(true);
         CREDITS.SetActive(false);
+        tapToStartButton.SetActive(false);
 
         RectTransform rt = GameName.GetComponent<RectTransform>();
         rt.anchoredPosition = new Vector2(-1000f, rt.anchoredPosition.y);
@@ -152,6 +152,7 @@ public class PlayerController : MonoBehaviour
         ScoreScren.SetActive(false);
         PantallaOpciones.SetActive(false);
         CREDITS.SetActive(false);
+        tapToStartButton.SetActive(true);
     }
 
     public void OpenCredits()
@@ -160,7 +161,6 @@ public class PlayerController : MonoBehaviour
         ScoreScren.SetActive(false);
         PantallaOpciones.SetActive(false);
         CREDITS.SetActive(true);
+        tapToStartButton.SetActive(false);
     }
 }
-
-

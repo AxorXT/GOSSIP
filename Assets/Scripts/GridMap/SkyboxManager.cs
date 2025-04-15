@@ -3,47 +3,48 @@ using UnityEngine;
 
 public class SkyboxManager : MonoBehaviour
 {
-    public Material skyboxDay;
-    public Material skyboxNight;
-    private float cycleDuration = 10f; // Duración de cada ciclo de día y noche
-    private float transitionDuration = 20f; // Duración de la transición (desvanecimiento)
+    public Material blendMaterial; // El material con el shader de arriba
+    public float transitionDuration = 5f;
 
-    // Cambié el modificador de acceso a public
-    public void StartDayNightCycle()
+    private float blendValue = 0f;
+    private bool transitioning = false;
+
+    public void StartBlend(bool toNight)
     {
-        StartCoroutine(SkyboxCycle());
+        if (!transitioning)
+            StartCoroutine(BlendSkybox(toNight ? 1f : 0f));
     }
 
-    private IEnumerator SkyboxCycle()
+    private IEnumerator BlendSkybox(float target)
     {
-        while (true)
-        {
-            // Transición de día a noche
-            yield return StartCoroutine(SwitchSkybox(skyboxDay, skyboxNight, transitionDuration));
-            yield return new WaitForSeconds(cycleDuration);
-
-            // Transición de noche a día
-            yield return StartCoroutine(SwitchSkybox(skyboxNight, skyboxDay, transitionDuration));
-            yield return new WaitForSeconds(cycleDuration);
-        }
-    }
-
-    // Método para hacer la transición suave entre dos skyboxes
-    private IEnumerator SwitchSkybox(Material fromSkybox, Material toSkybox, float duration)
-    {
+        transitioning = true;
+        float start = blendValue;
         float time = 0f;
-        // Mientras no haya alcanzado la duración de la transición, interpolamos
-        while (time < duration)
+
+        while (time < transitionDuration)
         {
-            float lerpFactor = time / duration;  // Factores de interpolación
-            RenderSettings.skybox.Lerp(fromSkybox, toSkybox, lerpFactor); // Interpolación suave entre skyboxes
-            DynamicGI.UpdateEnvironment(); // Actualiza la iluminación
+            blendValue = Mathf.Lerp(start, target, time / transitionDuration);
+            blendMaterial.SetFloat("_Blend", blendValue);
+            DynamicGI.UpdateEnvironment();
             time += Time.deltaTime;
-            yield return null; // Esperamos un frame
+            yield return null;
         }
 
-        // Cuando termina la interpolación, aplicamos el skybox final
-        RenderSettings.skybox = toSkybox;
-        DynamicGI.UpdateEnvironment(); // Asegura que la iluminación se actualice correctamente
+        blendValue = target;
+        blendMaterial.SetFloat("_Blend", target);
+
+        // Refuerza el skybox aplicado y actualiza iluminación global correctamente
+        RenderSettings.skybox = blendMaterial;
+        DynamicGI.UpdateEnvironment();
+
+        transitioning = false;
+    }
+
+    void Start()
+    {
+        blendValue = 0f; // Día al inicio
+        blendMaterial.SetFloat("_Blend", blendValue);
+        RenderSettings.skybox = blendMaterial;
+        DynamicGI.UpdateEnvironment(); // Asegura que desde el inicio esté todo bien aplicado
     }
 }

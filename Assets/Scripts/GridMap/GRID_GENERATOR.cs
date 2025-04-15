@@ -1,6 +1,7 @@
 ﻿using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.SceneManagement;
+using UnityEngine.EventSystems;
 
 
 public class GRID_GENERATOR : MonoBehaviour
@@ -39,10 +40,14 @@ public class GRID_GENERATOR : MonoBehaviour
     private GameObject[] floorColumnPrefabs;
 
     public SkyboxManager skyboxManager;
+    public List<int> triggerBlocks = new List<int> { 30, 60, 90 }; // Z en unidades, no filas
+    private int nextTriggerIndex = 0;
+    private bool isNight = false; // Para alternar entre día y noche
+    private bool gameStarted = false;
+    private float startZ = 0f; // Posición Z del jugador al comenzar
 
     void Start()
     {
-        skyboxManager.StartDayNightCycle();
 
         roadWidth = Mathf.Max(3, gridWidth * 70 / 100);
         if (roadWidth % 2 == 0) roadWidth--;
@@ -65,6 +70,19 @@ public class GRID_GENERATOR : MonoBehaviour
 
     void Update()
     {
+        if (!gameStarted)
+        {
+            if (Input.touchCount > 0 || Input.GetMouseButtonDown(0)) // Toca o clic para empezar
+            {
+                gameStarted = true;
+                startZ = player.position.z;
+                Debug.Log("Juego iniciado. Comenzamos a contar bloques.");
+            }
+            return; // Detener la ejecución hasta que empiece
+        }
+
+        CheckSkyboxTrigger();
+
         if (player.position.z - safeZone > (spawnZ - gridHeight * cellSize))
         {
             SpawnRow();
@@ -270,6 +288,21 @@ public class GRID_GENERATOR : MonoBehaviour
             }
         }
         foreach (var key in toRemove) activeEnemies.Remove(key);
+    }
+
+    void CheckSkyboxTrigger()
+    {
+        if (!gameStarted || skyboxManager == null) return;
+
+        float distanceTravelled = player.position.z - startZ;
+        int blocksTravelled = Mathf.FloorToInt(distanceTravelled / cellSize);
+
+        if (blocksTravelled >= (nextTriggerIndex + 1) * 60)
+        {
+            isNight = !isNight;
+            skyboxManager.StartBlend(isNight);
+            nextTriggerIndex++;
+        }
     }
 
     public void Retry()
